@@ -1,0 +1,102 @@
+- name: Настроить систему автоматизации для управления системами и их ПО.
+  hosts: 10.107.8.242
+  vars:
+    username: "tester"
+    user_password: "12345"
+    group: "sudo"
+  become: true
+  tasks:
+    - name: Добавить пользователя и задать ему пароль, если пользователя не существует
+      ansible.builtin.user:
+        name: "{{ username }}"
+        password: "{{ user_password | password_hash('sha512') }}"
+        state: present
+        shell: /bin/bash
+        create_home: yes
+
+    - name:  Добавить пользователя в группу sudo, если группа sudo существует.
+      ansible.builtin.user:
+        name: "{{ username }}"
+        groups: "{{ group }}"
+        append: yes
+
+    - name: Установить nginx
+      apt:
+        name: nginx
+        state: present
+
+    - name: Установить утилиты
+      apt:
+        name: 
+          - wget
+          - gpg
+          - curl
+          - ca-certificates
+          - gnupg
+        state: present
+
+    - name: Добавление ключа GPG для pgAdmin4
+      ansible.builtin.shell:
+        cmd: curl https://www.pgadmin.org/static/packages_pgadmin_org.pub | gpg --dearmor -o /usr/share/keyrings/packages-pgadmin-org.gpg
+      args:
+        creates: /usr/share/keyrings/packages-pgadmin-org.gpg
+
+    - name: Добавление репозитория pgAdmin4
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/pgadmin4.list
+        line: deb [signed-by=/usr/share/keyrings/packages-pgadmin-org.gpg] https://ftp.postgresql.org/pub/pgadmin/pgadmin4/apt/noble pgadmin4 main
+        create: yes
+
+    - name: Добавление ключа GPG Microsoft
+      ansible.builtin.shell:
+        cmd: wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/packages.microsoft.gpg
+      args:
+        creates: /usr/share/keyrings/packages.microsoft.gpg
+
+    - name: Добавление репозитория VS Code
+      ansible.builtin.lineinfile:
+        path: /etc/apt/sources.list.d/vscode.list
+        line: "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main"
+        create: yes
+
+    - name: Обновить список пакетов
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Установить PostgreSQL
+      apt:
+        name: postgresql
+        state: present
+
+    - name: Установить pgAdmin
+      apt:
+        name: pgadmin4
+        state: present
+
+    - name: Установить VS Code
+      apt:
+        name: code
+        state: present
+
+    - name:  Установить плагины VS Code
+      command: code --install-extension wayou.vscode-todo-highlight
+      become: false
+
+    - name:  Установить плагины VS Code
+      command: code --install-extension esbenp.prettier-vscode
+      become: false
+
+    - name: Установка Node.js
+      apt:
+        name:
+          - nodejs
+          - npm
+        state: present
+
+    - name: Deny all access to tcp port 80
+      community.general.ufw:
+        delete: true
+        rule: deny
+        port: '80'
+        proto: tcp
